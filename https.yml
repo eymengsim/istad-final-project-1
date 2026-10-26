@@ -1,0 +1,24 @@
+---
+- name: HTTPS for Jenkins
+  hosts: jenkins
+  become: true
+  vars:
+    app_domain: "{{ domains.jenkins }}"
+    app_port: 8080
+  roles: [https]
+
+- name: HTTPS for SonarQube
+  hosts: sonarqube
+  become: true
+  vars:
+    app_domain: "{{ domains.sonarqube }}"
+    app_port: 9000
+  roles: [https]
+
+- name: HTTPS for Nexus
+  hosts: nexus
+  become: true
+  vars:
+    app_domain: "{{ domains.nexus }}"
+    app_port: 8081
+  roles: [https]

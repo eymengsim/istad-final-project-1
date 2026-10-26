@@ -1,0 +1,70 @@
+---
+- name: Require DuckDNS token and Let's Encrypt email
+  ansible.builtin.assert:
+    that:
+      - duckdns_token | length > 0
+      - le_email | length > 0
+    fail_msg: "export DUCKDNS_TOKEN=... and LE_EMAIL=... first"
+  delegate_to: localhost
+  become: false
+
+- name: Point DuckDNS domain to this machine
+  ansible.builtin.uri:
+    url: "https://www.duckdns.org/update?domains={{ app_domain.split('.')[0] }}&token={{ duckdns_token }}&ip={{ inventory_hostname }}"
+    return_content: true
+  register: dns
+  failed_when: "'OK' not in dns.content"
+  no_log: true
+  delegate_to: localhost
+  become: false
+
+- name: Install nginx and certbot
+  ansible.builtin.apt:
+    name: [nginx, certbot, python3-certbot-nginx]
+    update_cache: true
+    state: present
+
+- name: Nginx reverse proxy vhost
+  ansible.builtin.template:
+    src: vhost.conf.j2
+    dest: "/etc/nginx/sites-available/{{ app_domain }}"
+    force: false
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Enable vhost
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ app_domain }}"
+    dest: "/etc/nginx/sites-enabled/{{ app_domain }}"
+    state: link
+  notify: Reload nginx
+
+- name: Disable default vhost
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Start nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Apply nginx changes now
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait until domain resolves to this machine
+  ansible.builtin.command: "getent hosts {{ app_domain }}"
+  register: dns_check
+  until: dns_check.rc == 0 and inventory_hostname in dns_check.stdout
+  retries: 20
+  delay: 15
+  changed_when: false
+
+- name: Issue HTTPS certificate
+  ansible.builtin.command: >
+    certbot --nginx -d {{ app_domain }} -m {{ le_email }}
+    --agree-tos --no-eff-email --non-interactive --redirect
+  args:
+    creates: "/etc/letsencrypt/live/{{ app_domain }}/fullchain.pem"

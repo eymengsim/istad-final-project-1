@@ -1,0 +1,8 @@
+---
+- name: Base setup on all machines
+  hosts: managed
+  become: true
+  roles:
+    - common
+    - docker
+    - portainer

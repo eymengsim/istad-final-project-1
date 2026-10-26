@@ -1,0 +1,64 @@
+---
+- name: Wait for cloud-init to finish (avoids apt lock)
+  ansible.builtin.command: cloud-init status --wait
+  changed_when: false
+  failed_when: false
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: [tree, git, curl, wget, unzip, zsh, vim, htop, acl, ca-certificates, gnupg]
+    update_cache: true
+    state: present
+
+- name: Ensure apt keyrings dir
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: GitHub CLI apt key
+  ansible.builtin.get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    mode: "0644"
+
+- name: GitHub CLI apt repo
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
+    filename: github-cli
+    state: present
+
+- name: Install gh
+  ansible.builtin.apt:
+    name: gh
+    update_cache: true
+    state: present
+
+- name: Install oh-my-zsh
+  ansible.builtin.git:
+    repo: https://github.com/ohmyzsh/ohmyzsh.git
+    dest: "/home/{{ common_user }}/.oh-my-zsh"
+    depth: 1
+  become_user: "{{ common_user }}"
+
+- name: Create .zshrc from oh-my-zsh template
+  ansible.builtin.copy:
+    src: "/home/{{ common_user }}/.oh-my-zsh/templates/zshrc.zsh-template"
+    dest: "/home/{{ common_user }}/.zshrc"
+    remote_src: true
+    force: false
+    owner: "{{ common_user }}"
+    group: "{{ common_user }}"
+    mode: "0644"
+
+- name: Set zsh as default shell
+  ansible.builtin.user:
+    name: "{{ common_user }}"
+    shell: /usr/bin/zsh
+
+- name: Create 4G swap file
+  ansible.builtin.shell: |
+    fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  args:
+    creates: /swapfile

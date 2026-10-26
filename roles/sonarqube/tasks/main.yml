@@ -1,0 +1,27 @@
+---
+- name: Kernel settings required by SonarQube
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+  loop:
+    - { key: vm.max_map_count, value: "524288" }
+    - { key: fs.file-max, value: "131072" }
+
+- name: SonarQube directory
+  ansible.builtin.file:
+    path: /opt/sonarqube
+    state: directory
+    mode: "0755"
+
+- name: SonarQube compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: /opt/sonarqube/compose.yml
+    mode: "0600"
+
+- name: Start SonarQube
+  community.docker.docker_compose_v2:
+    project_src: /opt/sonarqube
+    state: present

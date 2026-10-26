@@ -1,0 +1,97 @@
+---
+- name: Provision infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  module_defaults:
+    group/aws:
+      region: "{{ region }}"
+
+  tasks:
+    - name: Check local SSH key
+      ansible.builtin.stat:
+        path: "{{ key_path }}"
+      register: local_key
+
+    - name: Create AWS key pair only if no local key
+      amazon.aws.ec2_key:
+        name: "{{ key_name }}"
+      register: new_key
+      when: not local_key.stat.exists
+
+    - name: Save private key
+      ansible.builtin.copy:
+        content: "{{ new_key.key.private_key }}"
+        dest: "{{ key_path }}"
+        mode: "0600"
+      when:
+        - new_key is changed
+        - new_key.key.private_key is defined
+
+    - name: Create security group
+      amazon.aws.ec2_security_group:
+        name: "{{ sg_name }}"
+        description: Final project (SSH, HTTP, HTTPS, Portainer)
+        vpc_id: "{{ vpc_id }}"
+        rules:
+          - proto: tcp
+            ports: [22, 80, 443, 9443]
+            cidr_ip: 0.0.0.0/0
+        tags:
+          Project: "{{ project_tag }}"
+      register: sg
+
+    - name: Launch machines
+      amazon.aws.ec2_instance:
+        name: "{{ item.name }}"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ item.type }}"
+        image_id: "ami-081570719bfdf60cc"
+        vpc_subnet_id: "{{ subnet_id }}"
+        security_group: "{{ sg.group_id }}"
+        network:
+          assign_public_ip: true
+        volumes:
+          - device_name: /dev/sda1
+            ebs:
+              volume_size: "{{ item.disk }}"
+              volume_type: gp3
+              delete_on_termination: true
+        tags:
+          Project: "{{ project_tag }}"
+          Role: "{{ item.role }}"
+        state: running
+        wait: true
+      loop: "{{ machines }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: launched
+
+    - name: Wait for SSH
+      ansible.builtin.wait_for:
+        host: "{{ item.instances[0].public_ip_address }}"
+        port: 22
+        delay: 5
+        timeout: 300
+      loop: "{{ launched.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Show machines
+      ansible.builtin.debug:
+        msg: "{{ item.item.name }} -> {{ item.instances[0].public_ip_address }}"
+      loop: "{{ launched.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+    - name: Refresh inventory with the new machines
+      ansible.builtin.meta: refresh_inventory
+
+- name: Configure machines
+  import_playbook: site.yml
+
+- name: Install apps
+  import_playbook: apps.yml
+
+- name: Domains and HTTPS
+  import_playbook: https.yml

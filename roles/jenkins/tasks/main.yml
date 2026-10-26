@@ -1,0 +1,17 @@
+---
+- name: Jenkins directory
+  ansible.builtin.file:
+    path: /opt/jenkins
+    state: directory
+    mode: "0755"
+
+- name: Jenkins compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: /opt/jenkins/compose.yml
+    mode: "0644"
+
+- name: Start Jenkins
+  community.docker.docker_compose_v2:
+    project_src: /opt/jenkins
+    state: present

@@ -1,0 +1,22 @@
+---
+- name: Nexus directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "0755"
+  loop:
+    - { path: /opt/nexus, owner: root }
+    - { path: /opt/nexus/data, owner: "200" }
+
+- name: Nexus compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: /opt/nexus/compose.yml
+    mode: "0644"
+
+- name: Start Nexus
+  community.docker.docker_compose_v2:
+    project_src: /opt/nexus
+    state: present

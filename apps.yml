@@ -1,0 +1,15 @@
+---
+- name: Jenkins
+  hosts: jenkins
+  become: true
+  roles: [jenkins]
+
+- name: SonarQube
+  hosts: sonarqube
+  become: true
+  roles: [sonarqube]
+
+- name: Nexus
+  hosts: nexus
+  become: true
+  roles: [nexus]

@@ -1,0 +1,8 @@
+ansible-venv/
+venv/
+.env
+.env.*
+*.pem
+*.key
+__pycache__/
+*.pyc

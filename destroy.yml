@@ -1,0 +1,29 @@
+---
+# Reset (destroy) the whole infrastructure. Add -e delete_key=true to also remove the key pair.
+- name: Destroy infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  module_defaults:
+    group/aws:
+      region: "{{ region }}"
+  tasks:
+    - name: Terminate all project instances
+      amazon.aws.ec2_instance:
+        state: absent
+        wait: true
+        filters:
+          "tag:Project": "{{ project_tag }}"
+          instance-state-name: [pending, running, stopping, stopped]
+
+    - name: Delete security group
+      amazon.aws.ec2_security_group:
+        name: "{{ sg_name }}"
+        vpc_id: "{{ vpc_id }}"
+        state: absent
+
+    - name: Delete AWS key pair (optional)
+      amazon.aws.ec2_key:
+        name: "{{ key_name }}"
+        state: absent
+      when: delete_key | default(false) | bool
